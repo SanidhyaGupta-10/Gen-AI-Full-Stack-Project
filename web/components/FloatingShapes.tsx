@@ -1,7 +1,7 @@
 "use client";
 
 import { motion } from "framer-motion";
-import type { IProps } from "../types/types";
+import type { IProps } from "@/types/types";
 
 const FloatingShape = ({ color, size, top, left, delay }: IProps) => {
   return (

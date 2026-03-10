@@ -2,7 +2,7 @@
 
 import React from "react";
 import Link from "next/link";
-import { useAuth } from "@/app/hooks/useAuth";
+import { useAuth } from "@/hooks/useAuth";
 import { motion } from "framer-motion";
 import { LogOut, User, LayoutDashboard, BrainCircuit } from "lucide-react";
 
