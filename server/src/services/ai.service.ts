@@ -87,12 +87,29 @@ You MUST output ONLY valid JSON. Your JSON MUST contain EXACTLY the following st
   });
 
   const raw = completion.choices[0]?.message.content;
-  if (!raw) throw new Error("Groq returned an empty response");
+  if (!raw) {
+    console.error("[AI] Groq returned an empty response for interview report");
+    throw new Error("AI failed to generate report response. Please try again.");
+  }
 
-  console.log("[AI] raw response:", raw);
+  console.log("[AI] Raw response received for report. Parsing...");
 
-  const parsed = JSON.parse(raw);
-  return InterviewReportSchema.parse(parsed);
+  let parsed;
+  try {
+    parsed = JSON.parse(raw);
+  } catch (e) {
+    console.error("[AI] Failed to parse JSON from Groq:", raw);
+    throw new Error("AI returned malformed JSON for the report. Please try again.");
+  }
+
+  const validation = InterviewReportSchema.safeParse(parsed);
+  if (!validation.success) {
+    console.error("[AI] Zod validation failed for interview report:", validation.error.format());
+    // Provide a more user-friendly error from the first Zod issue
+    throw new Error(`Report generation failed validation: ${validation.error.issues[0]?.path.join(".") || "unknown"} - ${validation.error.issues[0]?.message || "invalid format"}`);
+  }
+
+  return validation.data;
 }
 
 
@@ -100,6 +117,7 @@ You MUST output ONLY valid JSON. Your JSON MUST contain EXACTLY the following st
 const ResumePdfSchema = z.object({
   html: z
     .string()
+    .min(100)
     .describe(
       "Full, self-contained HTML string for the resume. Must include inline CSS. No external links."
     ),
@@ -134,7 +152,7 @@ export async function generateResumePdf({
     2.  Use a professional, clean, and modern layout.
     3.  Highlight relevant impact, achievements, and technical skills.
     4.  The output MUST be a JSON object with a single field "html".
-    5.  The "html" field must contain a complete, self-contained HTML5 document.
+    5.  The "html" field must contain a complete, valid HTML5 document.
     6.  Use inline <style> tags for ALL CSS. No external CSS or fonts allowed.
     7.  Use professional colors (e.g., #2c3e50 for headers, #7f8c8d for subtexts).
     8.  Structure: Header (Contact Info), Summary/Objective, Skills, Experience, Projects, Education.
@@ -147,6 +165,7 @@ export async function generateResumePdf({
     - Maintain generous white space (margin/padding) for readability.
     - Maximize clarity and visual hierarchy.
     - The HTML will be rendered via Puppeteer on A4 paper.
+    - Ensure the CSS makes the page look professional (use borders, spacing, and clean typography).
 
     FORMAT:
     {
@@ -160,49 +179,76 @@ export async function generateResumePdf({
       messages: [
         {
           role: "system",
-          content: "You are a professional resume writer. You return ONLY valid JSON with a single 'html' key containing a complete, stylized HTML resume."
+          content: "You are a professional resume writer. You return ONLY valid JSON with a single 'html' key containing a complete, stylized HTML resume. NEVER return null for the 'html' field."
         },
         { role: "user", content: prompt },
       ],
       response_format: { type: "json_object" },
+      max_tokens: 4000, // Increase tokens for longer resumes
+      temperature: 0.5, // Slightly lower temperature for more consistent formatting
     });
 
     const raw = completion.choices[0]?.message.content;
     if (!raw) {
       console.error("[AI] Groq returned empty content for resume PDF");
-      throw new Error("Groq returned an empty response for resume PDF");
+      throw new Error("AI returned an empty response. Please try again.");
     }
 
+    console.log("[AI] Raw response received. Parsing...");
+    
     let parsed;
     try {
       parsed = JSON.parse(raw);
     } catch (e) {
       console.error("[AI] Failed to parse JSON from Groq:", raw);
-      throw new Error("Invalid JSON format from AI model");
+      throw new Error("AI returned malformed JSON. Please try again.");
     }
 
-    const { html } = ResumePdfSchema.parse(parsed);
-    console.log("[AI] HTML generated successfully. Length:", html.length);
+    if (!parsed.html) {
+      console.error("[AI] HTML field is missing or null in AI response:", parsed);
+      throw new Error("AI failed to generate resume HTML. This can happen if the input is too long or triggers a filter.");
+    }
+
+    const validation = ResumePdfSchema.safeParse(parsed);
+    if (!validation.success) {
+      console.error("[AI] Zod validation failed for resume HTML:", validation.error.format());
+      throw new Error(`Resume generation failed validation: ${validation.error.issues[0]?.message || "invalid format"}`);
+    }
+
+    const { html } = validation.data;
+    console.log("[AI] HTML validated successfully. Length:", html.length);
 
     // ── Render HTML → PDF buffer via Puppeteer ───────────────────────────────
     console.log("[Puppeteer] Launching browser...");
+    
+    // Note: Puppeteer on Render requires specific flags and might need puppeteer-core 
+    // depending on the environment setup.
     const browser = await puppeteer.launch({
       headless: true,
-      args: ["--no-sandbox", "--disable-setuid-sandbox", "--disable-dev-shm-usage"],
+      args: [
+        "--no-sandbox", 
+        "--disable-setuid-sandbox", 
+        "--disable-dev-shm-usage",
+        "--disable-gpu",
+        "--single-process" // Help reduce memory usage on small instances
+      ],
+      executablePath: process.env.PUPPETEER_EXECUTABLE_PATH || undefined, // Support custom chrome path on Linux
     });
 
     try {
       const page = await browser.newPage();
       console.log("[Puppeteer] Setting content...");
+      
+      // We wrap this in a timeout and try-catch for better visibility
       await page.setContent(html, { 
-        waitUntil: "networkidle0",
-        timeout: 30000 
+        waitUntil: ["load", "networkidle0"],
+        timeout: 60000 
       });
 
       console.log("[Puppeteer] Generating PDF...");
       const pdfBuffer = await page.pdf({
         format: "A4",
-        margin: { top: "15mm", bottom: "15mm", left: "15mm", right: "15mm" },
+        margin: { top: "10mm", bottom: "10mm", left: "10mm", right: "10mm" },
         printBackground: true,
         displayHeaderFooter: false,
       });
@@ -211,12 +257,14 @@ export async function generateResumePdf({
       return Buffer.from(pdfBuffer);
     } catch (renderError: any) {
       console.error("[Puppeteer] Error during rendering:", renderError);
-      throw new Error(`Failed to render PDF: ${renderError.message}`);
+      throw new Error(`PDF rendering failed: ${renderError.message}`);
     } finally {
       await browser.close();
     }
   } catch (error: any) {
     console.error("[AI] Error in generateResumePdf:", error);
+    // If it's a ZodError (which we handled above but just in case), preserve info
     throw error;
   }
-}
+}
+
