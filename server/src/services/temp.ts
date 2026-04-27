@@ -1,7 +1,7 @@
 export const resume = `
 ==============================
         ADITYA GUPTA
-     Full Stack Developer
+     Web Developer
 ==============================
 
 CONTACT
@@ -11,7 +11,7 @@ CONTACT
 - Location: India
 
 SUMMARY
-- Full Stack Developer focused on building scalable web applications.
+- Web Developer focused on building scalable web applications.
 - Experienced in React, Node.js, real-time systems, and API integrations.
 - Interested in AI-powered applications and modern web architectures.
 
