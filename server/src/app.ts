@@ -21,8 +21,8 @@ app.get("/", (req: Request, res: Response) => {
     })
 });
 
-app.get("/health", (req, res) => {
-  res.status(200).send("OK");
+app.get("/health", (req: Request, res: Response) => {
+    res.status(200).send("OK");
 });
 
 app.use("/api/auth", authRoutes);

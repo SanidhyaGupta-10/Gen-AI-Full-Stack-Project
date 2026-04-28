@@ -55,7 +55,7 @@ export function useGetAllInterviewReports() {
                         withCredentials: true,
                     }
                 );
-                setReports(data.reports ?? data.data ?? data);
+                setReports(data.interviewReports ?? data.reports ?? data.data ?? data);
             } catch (err: unknown) {
                 setError("Failed to load interview reports.");
                 console.error(err);

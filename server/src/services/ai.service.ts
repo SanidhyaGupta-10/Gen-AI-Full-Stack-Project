@@ -243,8 +243,8 @@ export async function generateResumePdf({
       
       // We wrap this in a timeout and try-catch for better visibility
       await page.setContent(html, { 
-        waitUntil: ["load", "networkidle0"],
-        timeout: 60000 
+        waitUntil: "domcontentloaded",
+        timeout: 30000 
       });
 
       console.log("[Puppeteer] Generating PDF...");

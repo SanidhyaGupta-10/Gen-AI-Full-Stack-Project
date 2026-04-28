@@ -4,7 +4,7 @@ import React from "react";
 import Link from "next/link";
 import { useAuth } from "@/hooks/useAuth";
 import { motion } from "framer-motion";
-import { LogOut, User, LayoutDashboard, BrainCircuit } from "lucide-react";
+import { LogOut, User, LayoutDashboard, BrainCircuit, History } from "lucide-react";
 
 export default function Navbar() {
   const { user, logout, loading } = useAuth();
@@ -34,6 +34,14 @@ export default function Navbar() {
                 >
                   <LayoutDashboard size={16} />
                   Dashboard
+                </Link>
+
+                <Link 
+                  href="/history" 
+                  className="hidden md:flex items-center gap-2 text-sm font-medium text-white/60 hover:text-white transition-colors"
+                >
+                  <History size={16} />
+                  History
                 </Link>
 
                 <div className="h-4 w-px bg-white/10 hidden md:block" />
